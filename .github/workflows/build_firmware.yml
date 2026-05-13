@@ -18,20 +18,19 @@ jobs:
           run: |
             cd /src/3-PX4_Firmware
             
-            # 1. 기존 서브모듈 캐시 및 설정 완전 초기화
+            # 1. 서브모듈을 지우지 않고 업데이트만 진행
             git config --global --add safe.directory /src
             git config --global url."https://github.com/".insteadOf "git@github.com:"
             
-            # 2. .gitmodules에 기재된 대로 강제 동기화
-            git submodule deinit -f . || true
+            # 2. 필요한 서브모듈만 빠르게 가져오기
             git submodule sync --recursive
+            git submodule update --init --recursive --depth 1 --jobs 8
             
-            # 3. 에러가 나도 필요한 핵심만 골라 받기 (mavlink, matrix, nuttx 등)
-            # 86점 받으셨던 그 실력으로 이 고비만 넘겨봅시다!
-            git submodule update --init --recursive --depth 1 --jobs 8 || echo "Submodule partial failure ignored"
+            # 3. [중요] distclean은 서브모듈을 지우므로 절대 금지! 
+            # 대신 빌드 폴더만 지우는 clean 정도만 하거나 바로 빌드합니다.
+            rm -rf build/
             
-            # 4. 빌드 실행
-            make distclean
+            # 4. 진짜 빌드 시작
             make px4_fmu-v4_default
 
       - name: Upload Artifact

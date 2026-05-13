@@ -5,36 +5,42 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. 최신 환경(Ubuntu 22.04)에서 코드를 깔끔하게 먼저 가져옵니다.
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          submodules: false # 서브모듈은 밑에서 수동으로 처리합니다.
 
-      # 2. 도커를 실행해서 빌드만 딱 하고 나옵니다.
       - name: Build in Docker
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/src \
-            -w /src \
-            px4io/px4-dev-nuttx-bionic:2020-04-01 \
-            /bin/bash -c "
-              # 도커 안에서 권한 문제 해결
-              git config --global --add safe.directory /src && \
-              git config --global url.'https://github.com/'.insteadOf 'git@github.com:' && \
-              
-              # 펌웨어 폴더로 이동 후 서브모듈 최소화해서 업데이트
-              cd 3-PX4_Firmware && \
-              git submodule sync --recursive && \
-              git submodule update --init --recursive --depth 1 && \
-              
-              # 빌드 실행
-              make distclean && \
+        uses: addnab/docker-run-action@v3
+        with:
+          image: px4io/px4-dev-nuttx-bionic:2020-04-01
+          options: -v ${{ github.workspace }}:/src
+          run: |
+            set -e # 에러 발생 시 즉시 중단
+            cd /src
+            
+            echo "--- 현재 폴더 목록 확인 ---"
+            ls -R | grep "/" | head -n 20
+            
+            echo "--- 깃 보안 설정 ---"
+            git config --global --add safe.directory /src
+            git config --global url."https://github.com/".insteadOf "git@github.com:"
+            
+            echo "--- 서브모듈 업데이트 ---"
+            # 서브모듈 업데이트가 실패해도 일단 진행하도록 수정
+            git submodule update --init --recursive --depth 1 || echo "Submodule warning: some components might be missing"
+            
+            echo "--- 빌드 시작 ---"
+            # 3-PX4_Firmware 폴더가 존재하는지 확인 후 이동
+            if [ -d "3-PX4_Firmware" ]; then
+              cd 3-PX4_Firmware
+              make distclean
               make px4_fmu-v4_default
-            "
+            else
+              echo "에러: 3-PX4_Firmware 폴더를 찾을 수 없습니다!"
+              exit 1
+            fi
 
-      # 3. 결과물만 쏙 빼서 올립니다.
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:

@@ -5,13 +5,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. 컨테이너 밖(최신 환경)에서 코드를 먼저 가져옵니다.
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          submodules: recursive
+          # 서브모듈을 여기서 바로 가져오지 않고 일단 소스만 받습니다.
+          fetch-depth: 0
 
-      # 2. 이제 PULSAR 팀의 도커 환경 안으로 들어가서 빌드만 실행합니다.
       - name: Run build in Docker
         uses: addnab/docker-run-action@v3
         with:
@@ -20,10 +19,14 @@ jobs:
           run: |
             cd /work
             git config --global --add safe.directory /work
+            
+            # 깨진 서브모듈 연결을 강제로 초기화하고 다시 받아옵니다.
+            git submodule sync
+            git submodule update --init --recursive --force
+            
             make distclean
             make px4_fmu-v4_default
 
-      # 3. 완성된 파일을 밖으로 꺼내서 업로드합니다.
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:

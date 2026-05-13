@@ -4,39 +4,39 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 도커 실행 시 root 권한을 부여하여 파일 쓰기 오류를 방지합니다.
-    container:
-      image: px4io/px4-dev-nuttx-bionic:2020-04-01
-      options: --user root
-
     steps:
+      # 1. 최신 환경(Ubuntu 22.04)에서 코드를 깔끔하게 먼저 가져옵니다.
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          submodules: false # 일단 껍데기만 먼저 가져옵니다.
           fetch-depth: 1
+          submodules: false # 서브모듈은 밑에서 수동으로 처리합니다.
 
-      - name: Build Firmware
+      # 2. 도커를 실행해서 빌드만 딱 하고 나옵니다.
+      - name: Build in Docker
         run: |
-          # 1. 깃 보안 설정 강제 해제 (safe.directory 오류 해결)
-          git config --global --add safe.directory '*'
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-          
-          # 2. 진짜 펌웨어가 들어있는 폴더로 이동 (이게 핵심입니다!)
-          cd 3-PX4_Firmware
-          
-          # 3. 서브모듈 수동 초기화 및 업데이트
-          git submodule sync
-          git submodule update --init --recursive --jobs 8 || echo "Submodule error ignored"
-          
-          # 4. 빌드 시작
-          make distclean
-          make px4_fmu-v4_default
-        shell: bash
+          docker run --rm \
+            -v ${{ github.workspace }}:/src \
+            -w /src \
+            px4io/px4-dev-nuttx-bionic:2020-04-01 \
+            /bin/bash -c "
+              # 도커 안에서 권한 문제 해결
+              git config --global --add safe.directory /src && \
+              git config --global url.'https://github.com/'.insteadOf 'git@github.com:' && \
+              
+              # 펌웨어 폴더로 이동 후 서브모듈 최소화해서 업데이트
+              cd 3-PX4_Firmware && \
+              git submodule sync --recursive && \
+              git submodule update --init --recursive --depth 1 && \
+              
+              # 빌드 실행
+              make distclean && \
+              make px4_fmu-v4_default
+            "
 
+      # 3. 결과물만 쏙 빼서 올립니다.
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pulsar_pixhawk_firmware
-          # 파일 경로도 3-PX4_Firmware 안쪽을 가리키도록 수정했습니다.
+          name: pulsar_firmware
           path: 3-PX4_Firmware/build/px4_fmu-v4_default/px4_fmu-v4_default.px4

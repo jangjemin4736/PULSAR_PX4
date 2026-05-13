@@ -1,21 +1,31 @@
 name: Build PULSAR Firmware
-on: [push] # 코드를 수정해서 올릴 때마다 자동 빌드
+on: [push] # 코드를 push하면 클라우드에서 빌드 시작
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: px4io/px4-dev-nuttx-focal:2022-08-12 # PULSAR가 쓰던 환경 그대로 사용
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive # PX4 핵심 라이브러리들 다 긁어오기
+    # PULSAR Jenkinsfile에 명시된 도커 이미지를 그대로 사용합니다.
+    container: px4io/px4-dev-nuttx-bionic:2020-04-01 
 
-      - name: Build for Pixhawk 4 Mini
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive # PX4 서브모듈까지 전부 긁어옴
+
+      - name: Set ownership
+        # 도커 컨테이너 내 권한 문제를 방지하기 위한 설정
+        run: git config --global --add safe.directory /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}
+
+      - name: Build Firmware
+        # Jenkinsfile 리스트에 있던 Pixhawk 4용 타겟 명령어를 실행합니다.
         run: |
-          make px4_fmu-v4mini_default # PULSAR 팀이 쓰던 빌드 명령어 그대로 실행
+          make distclean
+          make px4_fmu-v4_default 
 
       - name: Upload Artifact
+        # 빌드가 완료된 .px4 파일을 결과물로 저장합니다.
         uses: actions/upload-artifact@v3
         with:
-          name: pulsar_firmware
-          path: build/px4_fmu-v4mini_default/px4_fmu-v4mini_default.px4
+          name: pulsar_pixhawk_firmware
+          path: build/px4_fmu-v4_default/px4_fmu-v4_default.px4

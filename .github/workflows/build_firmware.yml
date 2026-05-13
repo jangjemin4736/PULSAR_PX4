@@ -4,34 +4,39 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 도커 실행 시 root 권한을 부여하여 파일 쓰기 오류를 방지합니다.
+    container:
+      image: px4io/px4-dev-nuttx-bionic:2020-04-01
+      options: --user root
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4 # 최신 보안 기준 적용
+        uses: actions/checkout@v4
         with:
-          submodules: false # 여기서 가져오지 말고 밑에서 수동으로 제어
+          submodules: false # 일단 껍데기만 먼저 가져옵니다.
           fetch-depth: 1
 
-      - name: Run build in Docker
-        uses: addnab/docker-run-action@v3
-        with:
-          image: px4io/px4-dev-nuttx-bionic:2020-04-01
-          options: -v ${{ github.workspace }}:/work
-          run: |
-            cd /work
-            # 1. 보안 관련 깃 설정 강제 적용
-            git config --global --add safe.directory /work
-            git config --global url."https://github.com/".insteadOf "git@github.com:"
-            
-            # 2. 서브모듈 초기화 (에러 무시하고 진행하도록 설정)
-            git submodule sync
-            git submodule update --init --recursive --jobs 8 || echo "Some submodules failed, but continuing..."
-            
-            # 3. 빌드 시작
-            make distclean
-            make px4_fmu-v4_default
+      - name: Build Firmware
+        run: |
+          # 1. 깃 보안 설정 강제 해제 (safe.directory 오류 해결)
+          git config --global --add safe.directory '*'
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          
+          # 2. 진짜 펌웨어가 들어있는 폴더로 이동 (이게 핵심입니다!)
+          cd 3-PX4_Firmware
+          
+          # 3. 서브모듈 수동 초기화 및 업데이트
+          git submodule sync
+          git submodule update --init --recursive --jobs 8 || echo "Submodule error ignored"
+          
+          # 4. 빌드 시작
+          make distclean
+          make px4_fmu-v4_default
+        shell: bash
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: pulsar_pixhawk_firmware
-          path: build/px4_fmu-v4_default/px4_fmu-v4_default.px4
+          # 파일 경로도 3-PX4_Firmware 안쪽을 가리키도록 수정했습니다.
+          path: 3-PX4_Firmware/build/px4_fmu-v4_default/px4_fmu-v4_default.px4

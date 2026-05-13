@@ -4,24 +4,28 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: px4io/px4-dev-nuttx-bionic:2020-04-01 
-
     steps:
+      # 1. 컨테이너 밖(최신 환경)에서 코드를 먼저 가져옵니다.
       - name: Checkout code
-        uses: actions/checkout@v4 # v4로 업데이트
+        uses: actions/checkout@v3
         with:
-          submodules: recursive 
+          submodules: recursive
 
-      - name: Set ownership
-        run: git config --global --add safe.directory /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}
+      # 2. 이제 PULSAR 팀의 도커 환경 안으로 들어가서 빌드만 실행합니다.
+      - name: Run build in Docker
+        uses: addnab/docker-run-action@v3
+        with:
+          image: px4io/px4-dev-nuttx-bionic:2020-04-01
+          options: -v ${{ github.workspace }}:/work
+          run: |
+            cd /work
+            git config --global --add safe.directory /work
+            make distclean
+            make px4_fmu-v4_default
 
-      - name: Build Firmware
-        run: |
-          make distclean
-          make px4_fmu-v4_default 
-
+      # 3. 완성된 파일을 밖으로 꺼내서 업로드합니다.
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4 # v4로 업데이트 (이게 핵심!)
+        uses: actions/upload-artifact@v4
         with:
           name: pulsar_pixhawk_firmware
           path: build/px4_fmu-v4_default/px4_fmu-v4_default.px4
